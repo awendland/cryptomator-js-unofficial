@@ -1,0 +1,19 @@
+{
+  "name": "cryptomator-js",
+  "version": "0.1.0",
+  "description": "An unofficial, partial Node.js port of Cryptomator's cryptofs",
+  "main": "index.js",
+  "author": "Alex Wendland <me@alexwendland.com>",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^12.7.2",
+    "prettier": "^1.18.2",
+    "ts-node": "^8.3.0",
+    "type-fest": "^0.7.1",
+    "typescript": "^3.5.3"
+  },
+  "dependencies": {
+    "miscreant": "^0.3.2",
+    "nano-base32": "^1.0.1"
+  }
+}
