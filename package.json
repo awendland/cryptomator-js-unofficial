@@ -5,15 +5,31 @@
   "main": "index.js",
   "author": "Alex Wendland <me@alexwendland.com>",
   "license": "MIT",
+  "scripts": {
+    "dev": "ts-node test/index.ts",
+    "test": "ava"
+  },
+  "ava": {
+    "compileEnhancements": false,
+    "extensions": [
+      "ts"
+    ],
+    "require": [
+      "ts-node/register/transpile-only"
+    ]
+  },
   "devDependencies": {
     "@types/node": "^12.7.2",
+    "@types/openpgp": "^4.4.6",
+    "ava": "^2.2.0",
     "prettier": "^1.18.2",
     "ts-node": "^8.3.0",
     "type-fest": "^0.7.1",
     "typescript": "^3.5.3"
   },
   "dependencies": {
+    "base-x": "^3.0.6",
     "miscreant": "^0.3.2",
-    "nano-base32": "^1.0.1"
+    "openpgp": "^4.6.0"
   }
 }

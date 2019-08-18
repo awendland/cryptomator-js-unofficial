@@ -1,10 +1,15 @@
 import { Opaque } from 'type-fest'
 import * as crypto from 'crypto'
-import base32 from 'nano-base32'
+import baseX from 'base-x'
 import * as miscreant from 'miscreant'
+import * as openpgp from 'openpgp'
 
 export const asBuffer = (bufOrStr: string | Buffer): Buffer =>
   Buffer.isBuffer(bufOrStr) ? bufOrStr : Buffer.from(bufOrStr)
+
+// https://guava.dev/releases/16.0/api/docs/com/google/common/io/BaseEncoding.html
+// TODO this isn't decoding correctly (probably, it's not handling `=` padding)
+const base32guava = baseX('ABCDEFGHIJKLMNOPQRSTUVWXYZ234567')
 
 /*
  * MasterKey Operations
@@ -25,22 +30,21 @@ export type VaultKeys = {
   encryptionMasterKey: Buffer
 }
 
-export const aesKeyWrap = (key: Buffer, kek: Buffer): Buffer => {
-  const iv = Buffer.from('A6A6A6A6A6A6A6A6', 'hex')
-  const cipher = crypto.createCipheriv('id-aes128-wrap', kek, iv)
-  const result = cipher.update(key)
-  cipher.final()
-  return result
-}
+// export const aesKeyWrap = (key: Buffer, kek: Buffer): Buffer => {
+//   const iv = Buffer.from('A6A6A6A6A6A6A6A6', 'hex')
+//   const cipher = crypto.createCipheriv('id-aes128-wrap', kek, iv)
+//   const result = cipher.update(key)
+//   cipher.final()
+//   return result
+// }
 
-export const aesKeyUnwrap = (key: Buffer, kek: Buffer): Buffer => {
-  console.log(key.length, key)
-  const iv = Buffer.from('A6A6A6A6A6A6A6A6', 'hex')
-  const decipher = crypto.createDecipheriv('id-aes128-wrap', kek, iv)
-  const result = [decipher.update(key)]
-  result.push(decipher.final())
-  return Buffer.concat(result)
-}
+// export const aesKeyUnwrap = (key: Buffer, kek: Buffer): Buffer => {
+//   console.log(key.length, key)
+//   const iv = Buffer.from('A6A6A6A6A6A6A6A6', 'hex')
+//   console.log(kek.toString('hex'))
+//   const decipher = crypto.createDecipheriv('id-aes128-wrap', kek, iv)
+//   return Buffer.concat([decipher.update(key), decipher.final()])
+// }
 
 export const deriveMasterKeys = async (
   params: MasterkeyParams,
@@ -49,8 +53,8 @@ export const deriveMasterKeys = async (
   const kek: Buffer = await new Promise((res, rej) => {
     crypto.scrypt(
       asBuffer(password),
-      params.scryptSalt,
-      16,
+      Buffer.from(params.scryptSalt, 'base64'),
+      32,
       {
         N: params.scryptCostParam,
         r: params.scryptBlockSize,
@@ -59,16 +63,17 @@ export const deriveMasterKeys = async (
       (err, derivedKey) => (err ? rej(err) : res(derivedKey)),
     )
   })
-  console.log(kek.length, kek)
-  const macMasterKey = aesKeyUnwrap(
-    Buffer.from(params.hmacMasterKey, 'base64'),
-    kek,
-  )
-  const encryptionMasterKey = aesKeyUnwrap(
-    Buffer.from(params.primaryMasterKey, 'base64'),
-    kek,
-  )
-  return { macMasterKey, encryptionMasterKey }
+  const unwrap = (key: string) =>
+    Buffer.from(
+      openpgp.crypto.aes_kw.unwrap(
+        (kek as unknown) as string, // TODO fix @types/openpgp
+        (Buffer.from(key, 'base64') as unknown) as string,
+      ),
+    )
+  return {
+    macMasterKey: unwrap(params.hmacMasterKey),
+    encryptionMasterKey: unwrap(params.primaryMasterKey),
+  }
 }
 
 /*
@@ -85,8 +90,9 @@ export const createFileNameEncryptor = (
     const aesSiv = await miscreant.SIV.importKey(
       Buffer.concat([encMasterKey, macMasterKey]),
       'AES-SIV',
+      new miscreant.PolyfillCryptoProvider(),
     )
-    return base32.encode(
+    return base32guava.encode(
       await aesSiv.seal(asBuffer(cleartextName), [asBuffer(parentDirId)]),
     )
   }
@@ -102,10 +108,11 @@ export const createFileNameDecryptor = (
     const aesSiv = await miscreant.SIV.importKey(
       Buffer.concat([encMasterKey, macMasterKey]),
       'AES-SIV',
+      new miscreant.PolyfillCryptoProvider(),
     )
-    const plaintextName = base32.decode(ciphertextName)
+    const plaintextName = base32guava.decode(ciphertextName.replace('=', ''))
     return Buffer.from(
-      await aesSiv.open(base32.decode(ciphertextName), [asBuffer(parentDirId)]),
+      await aesSiv.open(plaintextName, [asBuffer(parentDirId)]),
     )
   }
 
